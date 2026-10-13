@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Portfolio · Ilias</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #120a33;
+            --ink: #fff6e0;
+            --pink: #ff3d9a;
+            --cyan: #2df5e0;
+            --sun: #ffd23f;
+            --card: #1d1250;
+            --px: 'Press Start 2P', ui-monospace, monospace;
+            --tx: 'Space Grotesk', system-ui, sans-serif;
+            box-sizing: border-box;
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px)
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: inherit
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--tx)
+        }
+
+        canvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block
+        }
+
+        #hud {
+            position: fixed;
+            top: calc(12px + env(safe-area-inset-top, 0px));
+            left: 14px;
+            right: 14px;
+            display: flex;
+            justify-content: space-between;
+            font: 11px/1.4 var(--px);
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none
+        }
+
+        #hud b {
+            color: var(--sun);
+            font-weight: 400
+        }
+
+        #card {
+            position: fixed;
+            left: 50%;
+            bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+            transform: translate(-50%, 24px);
+            width: min(560px, calc(100% - 28px));
+            background: var(--card);
+            border: 3px solid var(--c, var(--cyan));
+            box-shadow: 6px 6px 0 var(--c, var(--cyan));
+            padding: 18px 20px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s, transform .2s
+        }
+
+        #card.on {
+            opacity: 1;
+            transform: translate(-50%, 0);
+            pointer-events: auto
+        }
+
+        #card h2 {
+            font: 13px/1.5 var(--px);
+            margin: 0 0 10px;
+            color: var(--c, var(--cyan))
+        }
+
+        #card p,
+        #card li {
+            font-size: 16px;
+            line-height: 1.5;
+            margin: 0 0 8px;
+            max-width: 60ch
+        }
+
+        #card ul {
+            list-style: none;
+            padding: 0;
+            margin: 0
+        }
+
+        #card a {
+            color: var(--sun);
+            font-weight: 600
+        }
+
+        #card a:focus-visible,
+        button:focus-visible {
+            outline: 3px solid var(--sun);
+            outline-offset: 2px
+        }
+
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px
+        }
+
+        .chips span {
+            border: 2px solid var(--ink);
+            padding: 4px 10px;
+            font-size: 14px
+        }
+
+        #hint {
+            position: fixed;
+            left: 50%;
+            top: 38%;
+            transform: translateX(-50%);
+            font: 12px/2 var(--px);
+            text-align: center;
+            text-shadow: 3px 3px 0 #000;
+            transition: opacity .5s;
+            pointer-events: none
+        }
+
+        #pad {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+            display: none;
+            justify-content: space-between;
+            padding: 0 14px;
+            z-index: 5;
+            pointer-events: none
+        }
+
+        #pad div {
+            display: flex;
+            gap: 10px;
+            pointer-events: auto
+        }
+
+        #pad button {
+            width: 64px;
+            height: 64px;
+            font: 18px var(--px);
+            color: var(--ink);
+            background: #ffffff1f;
+            border: 3px solid var(--ink);
+            touch-action: none;
+            user-select: none
+        }
+
+        @media (pointer:coarse) {
+            #pad {
+                display: flex
+            }
+
+            #card {
+                bottom: calc(86px + env(safe-area-inset-bottom, 0px))
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="c" aria-label="Mundo del portfolio: camina con las flechas o A y D, salta con espacio"></canvas>
+    <div id="hud"><span>ILIAS</span><span>Monedas <b id="xp">0</b></span></div>
+    <div id="hint">Flechas o A / D para caminar<br>Espacio para saltar<br>Explora hacia la derecha</div>
+    <div id="card" role="region" aria-live="polite"></div>
+    <div id="pad">
+        <div><button id="bl" aria-label="Izquierda">&lt;</button><button id="br" aria-label="Derecha">&gt;</button>
+        </div>
+        <div><button id="bj" aria-label="Saltar">^</button></div>
+    </div>
+
+    <script>
+        (function () {
+            var cv = document.getElementById('c'), ctx = cv.getContext('2d'), card = document.getElementById('card'), hint = document.getElementById('hint'), xpEl = document.getElementById('xp');
+            var W, H, gy, dpr, WORLD = 3800, still = matchMedia('(prefers-reduced-motion: reduce)').matches, SPEED = 7.5;
+            function rs() { dpr = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.imageSmoothingEnabled = false; gy = Math.round(H * .76) }
+            addEventListener('resize', rs); rs();
+
+            var Z = [
+                { x: 420, col: '#8cff5a', name: 'CONTACTO', h: '<h2>Nivel 1 · Contacto</h2><p>Soy <b>Ilias</b>. Si quieres trabajar conmigo, escríbeme:</p><ul><li><a href="mailto:iliasmdv@gmail.com">iliasmdv@gmail.com</a></li><li><a href="https://github.com/IliasMdv">GitHub</a> · <a href="https://www.linkedin.com/in/ilias-mohamed-velasco-b539963a6/">LinkedIn</a> · <a href="#">Descargar CV</a></li></ul>' },
+                { x: 1350, col: '#2df5e0', name: 'INICIO', h: '<h2>Nivel 2 · Inicio</h2><p>Desarrollo webs y apps que se sienten vivas, desde el diseño de la interfaz hasta el servidor.</p><p>Sigue hacia la derecha para ver mi trabajo.</p>' },
+                { x: 2300, col: '#ff3d9a', name: 'PROYECTOS', h: '<h2>Nivel 3 · Proyectos</h2><ul><li><b>Proyecto uno:</b> app de tareas colaborativa en tiempo real. <a href="#">Ver demo</a></li><li><b>Proyecto dos:</b> panel de datos para una tienda online. <a href="#">Ver código</a></li><li><b>Proyecto tres:</b> juego web con canvas. <a href="#">Jugar</a></li></ul>' },
+                { x: 3250, col: '#ffd23f', name: 'SKILLS', h: '<h2>Nivel 4 · Skills</h2><div class="chips"><span>JavaScript</span><span>TypeScript</span><span>React</span><span>Node.js</span><span>Python</span><span>SQL</span><span>Git</span></div><p style="margin-top:12px">Ahora mismo estoy aprendiendo WebGL.</p>' }
+            ];
+            var coins = []; for (var i = 0; i < 26; i++) { coins.push({ x: 260 + i * 135, y: 0, hi: (i % 3 === 1), got: false }) }
+            var got = 0;
+            var stars = []; for (var i = 0; i < 70; i++)stars.push({ x: Math.random() * 2400, y: Math.random(), s: Math.random() < .2 ? 3 : 2, p: Math.random() * 6 });
+            var P = { x: 120, y: 0, vx: 0, vy: 0, f: 1, on: true, t: 0 }; P.y = gy;
+            var K = { l: 0, r: 0, j: 0 };
+            var map = { ArrowLeft: 'l', a: 'l', A: 'l', ArrowRight: 'r', d: 'r', D: 'r', ArrowUp: 'j', w: 'j', W: 'j', ' ': 'j' };
+            addEventListener('keydown', function (e) { if (map[e.key]) { K[map[e.key]] = 1; if (e.key === ' ' || e.key.indexOf('Arrow') == 0) e.preventDefault() } });
+            addEventListener('keyup', function (e) { if (map[e.key]) K[map[e.key]] = 0 });
+            function bind(id, k) { var b = document.getElementById(id); b.addEventListener('pointerdown', function (e) { e.preventDefault(); K[k] = 1 });['pointerup', 'pointerleave', 'pointercancel'].forEach(function (t) { b.addEventListener(t, function () { K[k] = 0 }) }) }
+            bind('bl', 'l'); bind('br', 'r'); bind('bj', 'j');
+
+            /* Chico: pelo negro corto, ropa blanca entera */
+            var BODY = ['...kkkk...', '..kkkkkk..', '..kssssk..', '..sesses..', '..ssssss..', '...ssss...', '..wwwwww..', '.wwwwwwww.', '.swwwwwws.', '..wwwwww..', '..wwggww..', '..wwwwww..'];
+            var LEGA = ['..ww..ww..', '..ww..ww..', '..xx..xx..'], LEGB = ['.ww....ww.', '.ww....ww.', '.xx....xx.'];
+            var COL = { k: '#14110f', s: '#d9a577', e: '#14110f', w: '#fafafa', g: '#c9ced4', x: '#e4e6e9' };
+            function sprite(x, y, f, fr) {
+                var s = 4, rows = BODY.concat(fr ? LEGA : LEGB), w = 10 * s;
+                ctx.fillStyle = '#00000055'; ctx.beginPath(); ctx.ellipse(x + w / 2, y, w * .55, 5, 0, 0, 7); ctx.fill();
+                ctx.save(); ctx.translate(x, y - rows.length * s); if (f < 0) { ctx.translate(w / 2, 0); ctx.scale(-1, 1); ctx.translate(-w / 2, 0) }
+                for (var r = 0; r < rows.length; r++)for (var c = 0; c < 10; c++) { var ch = rows[r][c]; if (ch !== '.') { ctx.fillStyle = COL[ch]; ctx.fillRect(c * s, r * s, s, s) } } ctx.restore()
+            }
+
+            var cur = -1, last = performance.now(), cam = 0, walked = 0;
+            function setCard(i) { if (i === cur) return; cur = i; if (i < 0) { card.classList.remove('on'); return } card.style.setProperty('--c', Z[i].col); card.innerHTML = Z[i].h; card.classList.add('on') }
+
+            function frame(now) {
+                var dt = Math.min(32, now - last) / 16.67; last = now;
+                var dir = K.r - K.l; P.vx = dir * SPEED; if (dir) P.f = dir;
+                if (K.j && P.on) { P.vy = -13.5; P.on = false }
+                P.vy += .72 * dt; P.x = Math.max(30, Math.min(WORLD - 30, P.x + P.vx * dt)); P.y += P.vy * dt;
+                if (P.y >= gy) { P.y = gy; P.vy = 0; P.on = true }
+                if (dir) { P.t += dt; walked += Math.abs(P.vx * dt); if (walked > 120) hint.style.opacity = 0 }
+                cam = Math.max(0, Math.min(WORLD - W, P.x - W / 2));
+                var near = -1; for (var i = 0; i < Z.length; i++)if (Math.abs(P.x - Z[i].x) < 190) near = i; setCard(near);
+                for (var i = 0; i < coins.length; i++) { var c = coins[i]; c.y = gy - (c.hi ? 150 : 62); if (!c.got && Math.abs(P.x + 20 - c.x) < 30 && Math.abs((P.y - 30) - c.y) < 46) { c.got = true; got++; xpEl.textContent = got } }
+                draw(now); requestAnimationFrame(frame)
+            }
+
+            function draw(now) {
+                var g = ctx.createLinearGradient(0, 0, 0, gy); g.addColorStop(0, '#0d0627'); g.addColorStop(.7, '#3a1170'); g.addColorStop(1, '#a2216f'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+                for (var i = 0; i < stars.length; i++) { var s = stars[i], x = ((s.x - cam * .05) % W + W) % W, y = s.y * gy * .6; ctx.globalAlpha = still ? .8 : .45 + .4 * Math.sin(now / 500 + s.p); ctx.fillStyle = '#fff'; ctx.fillRect(x, y, s.s, s.s) } ctx.globalAlpha = 1;
+                var sx = W * .72 - cam * .03, sy = gy - 110, sr = Math.min(90, W * .16); var sg = ctx.createLinearGradient(0, sy - sr, 0, sy + sr); sg.addColorStop(0, '#ffd23f'); sg.addColorStop(1, '#ff3d9a'); ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, sr, 0, 7); ctx.fill();
+                ctx.fillStyle = '#3a1170'; for (var k = 1; k < 6; k++)ctx.fillRect(sx - sr, sy + k * sr * .28, sr * 2, k * 1.6);
+                for (var L = 0; L < 2; L++) { var sp = L ? .35 : .15, hh = L ? 70 : 110; ctx.fillStyle = L ? '#2a0f66' : '#1d0a4d'; for (var x = 0; x < W; x += 8) { var wx = x + cam * sp, h = hh * .5 + hh * .3 * Math.sin(wx * .008 + L * 2) + hh * .2 * Math.sin(wx * .021); ctx.fillRect(x, gy - h, 8, h) } }
+                ctx.fillStyle = '#0e0626'; ctx.fillRect(0, gy, W, H - gy); ctx.fillStyle = '#2df5e0'; ctx.fillRect(0, gy, W, 3);
+                ctx.strokeStyle = '#ff3d9a66'; ctx.lineWidth = 2; ctx.beginPath(); for (var x = -cam % 70 - 70; x < W + 70; x += 70) { ctx.moveTo(x, gy); ctx.lineTo(W / 2 + (x - W / 2) * 3, H) } for (var k = 1; k < 6; k++) { var yy = gy + (H - gy) * Math.pow(k / 6, 2); ctx.moveTo(0, yy); ctx.lineTo(W, yy) } ctx.stroke();
+                ctx.save(); ctx.translate(-cam, 0);
+                for (var i = 0; i < Z.length; i++) {
+                    var z = Z[i], bw = 190, bh = 150 + i * 12, bx = z.x - bw / 2, by = gy - bh, lit = Math.abs(P.x - z.x) < 190;
+                    ctx.fillStyle = '#1d1250'; ctx.fillRect(bx, by, bw, bh); ctx.strokeStyle = z.col; ctx.lineWidth = 4; ctx.strokeRect(bx, by, bw, bh);
+                    for (var r = 0; r < 3; r++)for (var c = 0; c < 4; c++) { ctx.fillStyle = ((r * 4 + c + i) % 3 === 0 && !lit) ? '#33207a' : z.col; ctx.globalAlpha = lit ? 1 : .55; ctx.fillRect(bx + 16 + c * 42, by + 18 + r * 30, 24, 16) } ctx.globalAlpha = 1;
+                    ctx.fillStyle = z.col; ctx.fillRect(z.x - 18, gy - 44, 36, 44); ctx.fillStyle = '#0e0626'; ctx.fillRect(z.x - 12, gy - 38, 24, 38);
+                    ctx.font = '14px "Press Start 2P",monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#000'; ctx.fillText(z.name, z.x + 2, by - 14); ctx.fillStyle = z.col; ctx.fillText(z.name, z.x, by - 16); ctx.textAlign = 'left'
+                }
+                for (var i = 0; i < coins.length; i++) { var c = coins[i]; if (c.got) continue; var w = Math.abs(Math.cos(now / 220 + i)) * 14 + 3; ctx.fillStyle = '#ffd23f'; ctx.fillRect(c.x - w / 2, c.y - 10 + (still ? 0 : Math.sin(now / 300 + i) * 3), w, 20); ctx.fillStyle = '#fff6e0'; ctx.fillRect(c.x - w / 2, c.y - 10 + (still ? 0 : Math.sin(now / 300 + i) * 3), Math.min(w, 4), 20) }
+                sprite(P.x, P.y, P.f, Math.floor(P.t / 4) % 2 === 0 || !P.on);
+                ctx.restore();
+                ctx.fillStyle = '#ffffff30'; ctx.fillRect(14, H - 8, W - 28, 4); ctx.fillStyle = '#2df5e0'; ctx.fillRect(14, H - 8, (W - 28) * (P.x / WORLD), 4)
+            }
+
+            requestAnimationFrame(frame);
+        })();
+    </script>
+</body>
+
+</html>
